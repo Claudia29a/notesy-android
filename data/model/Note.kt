@@ -1,9 +1,11 @@
 package com.example.notesy.data.model
 
+import com.google.gson.annotations.SerializedName
+
 data class Note(
     val id: String,
     val title: String,
     val items: List<String>,
-    val createdAt: String? = null,
-    val updatedAt: String? = null
+    @SerializedName("createdAt")
+    val createdAt: String
 )

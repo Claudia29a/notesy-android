@@ -29,7 +29,7 @@ fun AddNoteScreen(
     // Navigate back when note is created
     LaunchedEffect(noteCreated) {
         if (noteCreated) {
-            Log.d("AddNoteScreen", "Note created, navigating back")
+            Log.d("AddNoteScreen", "✅ Note created successfully, navigating back")
             viewModel.resetNoteCreated()
             onNavigateBack()
         }
@@ -47,15 +47,25 @@ fun AddNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            Log.d("AddNoteScreen", "Save button clicked - title: '$title', items: ${items.size}")
+                            Log.d("AddNoteScreen", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                            Log.d("AddNoteScreen", "🔵 SAVE BUTTON CLICKED")
+                            Log.d("AddNoteScreen", "Title: '$title'")
+                            Log.d("AddNoteScreen", "Total items: ${items.size}")
+                            Log.d("AddNoteScreen", "Items: $items")
+
                             if (title.isNotBlank() && items.any { it.isNotBlank() }) {
                                 val validItems = items.filter { it.isNotBlank() }
-                                Log.d("AddNoteScreen", "Valid items: ${validItems.size}")
+                                Log.d("AddNoteScreen", "✅ Validation passed")
+                                Log.d("AddNoteScreen", "Valid items count: ${validItems.size}")
+                                Log.d("AddNoteScreen", "Valid items: $validItems")
+                                Log.d("AddNoteScreen", "🚀 Calling viewModel.createNote()")
                                 viewModel.createNote(title, validItems)
-                                // Don't call onNavigateBack() here anymore!
                             } else {
-                                Log.w("AddNoteScreen", "Save clicked but validation failed")
+                                Log.w("AddNoteScreen", "❌ Validation FAILED")
+                                Log.w("AddNoteScreen", "Title blank? ${title.isBlank()}")
+                                Log.w("AddNoteScreen", "No valid items? ${!items.any { it.isNotBlank() }}")
                             }
+                            Log.d("AddNoteScreen", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         },
                         enabled = title.isNotBlank() && items.any { it.isNotBlank() }
                     ) {

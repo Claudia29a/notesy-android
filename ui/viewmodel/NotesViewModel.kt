@@ -3,14 +3,17 @@ package com.example.notesy.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.notesy.data.model.CreateNoteRequest  // ← ADD THIS
-import com.example.notesy.data.model.Note               // ← ADD THIS
+import com.example.notesy.data.api.RetrofitInstance
+import com.example.notesy.data.model.CreateNoteRequest
+import com.example.notesy.data.model.Note
 import com.example.notesy.data.repository.NoteRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class NotesViewModel(private val repository: NoteRepository) : ViewModel() {
+class NotesViewModel : ViewModel() {
+
+    private val repository = NoteRepository(RetrofitInstance.api)
 
     private val _notes = MutableStateFlow<List<Note>>(emptyList())
     val notes: StateFlow<List<Note>> = _notes
@@ -45,14 +48,18 @@ class NotesViewModel(private val repository: NoteRepository) : ViewModel() {
     fun createNote(title: String, items: List<String>) {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
                 Log.d("NotesViewModel", "Creating note: $title with ${items.size} items")
                 val request = CreateNoteRequest(title, items)
                 repository.createNote(request)
                 Log.d("NotesViewModel", "Note created successfully")
                 _noteCreated.value = true
-                loadNotes() // Refresh the list
+                loadNotes()
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Failed to create note", e)
+                _noteCreated.value = true
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -64,12 +71,14 @@ class NotesViewModel(private val repository: NoteRepository) : ViewModel() {
     fun deleteNote(id: String) {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
                 Log.d("NotesViewModel", "Deleting note: $id")
                 repository.deleteNote(id)
-                Log.d("NotesViewModel", "Note deleted successfully")
                 loadNotes()
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Error deleting note", e)
+            } finally {
+                _isLoading.value = false
             }
         }
     }
