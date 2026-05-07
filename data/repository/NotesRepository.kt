@@ -1,34 +1,88 @@
 package com.example.notesy.data.repository
 
-import android.util.Log
 import com.example.notesy.data.api.NoteApiService
+import com.example.notesy.data.local.NoteDao
+import com.example.notesy.data.local.NoteEntity
+import com.example.notesy.data.local.toEntity
+import com.example.notesy.data.local.toNote
 import com.example.notesy.data.model.CreateNoteRequest
 import com.example.notesy.data.model.Note
+import com.google.gson.Gson
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import java.time.Instant
+import java.util.UUID
 
-class NoteRepository(private val apiService: NoteApiService) {
+class NoteRepository(
+    private val apiService: NoteApiService,
+    private val noteDao: NoteDao
+) {
 
-    suspend fun getNotes(): List<Note> {
-        return try {
-            Log.d("NoteRepository", "Fetching notes from API...")
-            val response = apiService.getNotes()
-            Log.d("NoteRepository", "Received ${response.size} notes from backend")
-            response
-        } catch (e: Exception) {
-            Log.e("NoteRepository", "Error fetching notes", e)
-            emptyList()
+    fun getAllNotesFlow(): Flow<List<Note>> {
+        return noteDao.getAllNotes().map { entities ->
+            entities.map { it.toNote() }
         }
     }
 
-    suspend fun createNote(request: CreateNoteRequest): Note {
-        Log.d("NoteRepository", "Creating note with title: ${request.title}")
-        val response = apiService.createNote(request)
-        Log.d("NoteRepository", "Note created successfully: ${response.id}")
-        return response
+    suspend fun syncWithBackend() {
+        try {
+            val unsyncedNotes = noteDao.getUnsyncedNotes()
+
+            unsyncedNotes.forEach { localNote ->
+                try {
+                    val itemsList = Gson().fromJson(
+                        localNote.items,
+                        Array<String>::class.java
+                    ).toList()
+
+                    val createdNote = apiService.createNote(
+                        CreateNoteRequest(
+                            title = localNote.title,
+                            items = itemsList
+                        )
+                    )
+
+                    noteDao.deleteNoteById(localNote.id)
+                    noteDao.insertNote(createdNote.toEntity(isSynced = true))
+                } catch (_: Exception) {
+                }
+            }
+
+            val notesFromApi = apiService.getNotes()
+            val entities = notesFromApi.map { it.toEntity(isSynced = true) }
+            noteDao.insertNotes(entities)
+        } catch (_: Exception) {
+        }
+    }
+
+    suspend fun createNote(title: String, items: List<String>) {
+        val localNote = NoteEntity(
+            id = UUID.randomUUID().toString(),
+            title = title,
+            items = Gson().toJson(items),
+            createdAt = Instant.now().toString(),
+            isSynced = false
+        )
+
+        noteDao.insertNote(localNote)
+
+        try {
+            val createdNote = apiService.createNote(
+                CreateNoteRequest(title = title, items = items)
+            )
+
+            noteDao.deleteNoteById(localNote.id)
+            noteDao.insertNote(createdNote.toEntity(isSynced = true))
+        } catch (_: Exception) {
+        }
     }
 
     suspend fun deleteNote(id: String) {
-        Log.d("NoteRepository", "Deleting note with id: $id")
-        apiService.deleteNote(id)
-        Log.d("NoteRepository", "Note deleted successfully")
+        noteDao.deleteNoteById(id)
+
+        try {
+            apiService.deleteNote(id)
+        } catch (_: Exception) {
+        }
     }
 }
