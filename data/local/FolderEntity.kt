@@ -3,13 +3,11 @@ package com.example.notesy.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "notes")
-data class NoteEntity(
+@Entity(tableName = "folders")
+data class FolderEntity(
     @PrimaryKey
     val id: String,
-    val title: String,
-    val items: String,
-    val folderId: String? = null,
+    val name: String,
     val createdAt: String,
     val isSynced: Boolean = false
 )

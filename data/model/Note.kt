@@ -1,11 +1,19 @@
 package com.example.notesy.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class Note(
     val id: String,
     val title: String,
     val items: List<String>,
-    @SerializedName("createdAt")
+    val folderId: String? = null,
     val createdAt: String
+)
+
+@Serializable
+data class CreateNoteRequest(
+    val title: String,
+    val items: List<String>,
+    val folderId: String? = null
 )

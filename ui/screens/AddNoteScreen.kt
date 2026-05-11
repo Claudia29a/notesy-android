@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.notesy.data.model.Note
 import com.example.notesy.ui.viewmodel.NotesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -20,7 +19,8 @@ import com.example.notesy.ui.viewmodel.NotesViewModel
 fun AddNoteScreen(
     viewModel: NotesViewModel,
     onNavigateBack: () -> Unit,
-    noteId: String? = null
+    noteId: String? = null,
+    folderId: String? = null
 ) {
     val notes by viewModel.notes.collectAsState()
     val existingNote = noteId?.let { id ->
@@ -54,31 +54,20 @@ fun AddNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            Log.d("AddNoteScreen", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                            Log.d("AddNoteScreen", "🔵 SAVE BUTTON CLICKED")
-                            Log.d("AddNoteScreen", "Title: '$title'")
-                            Log.d("AddNoteScreen", "Total items: ${items.size}")
-                            Log.d("AddNoteScreen", "Items: $items")
-
                             if (title.isNotBlank() && items.any { it.isNotBlank() }) {
                                 val validItems = items.filter { it.isNotBlank() }
-                                Log.d("AddNoteScreen", "✅ Validation passed")
-                                Log.d("AddNoteScreen", "Valid items count: ${validItems.size}")
-                                Log.d("AddNoteScreen", "Valid items: $validItems")
 
                                 if (existingNote != null) {
-                                    Log.d("AddNoteScreen", "🔄 Updating existing note with ID: ${existingNote.id}")
-                                    viewModel.updateNote(existingNote.id, title, validItems)
+                                    viewModel.updateNote(
+                                        existingNote.id,
+                                        title,
+                                        validItems,
+                                        existingNote.folderId
+                                    )
                                 } else {
-                                    Log.d("AddNoteScreen", "🚀 Creating new note")
-                                    viewModel.createNote(title, validItems)
+                                    viewModel.createNote(title, validItems, folderId)
                                 }
-                            } else {
-                                Log.w("AddNoteScreen", "❌ Validation FAILED")
-                                Log.w("AddNoteScreen", "Title blank? ${title.isBlank()}")
-                                Log.w("AddNoteScreen", "No valid items? ${!items.any { it.isNotBlank() }}")
                             }
-                            Log.d("AddNoteScreen", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         },
                         enabled = title.isNotBlank() && items.any { it.isNotBlank() }
                     ) {

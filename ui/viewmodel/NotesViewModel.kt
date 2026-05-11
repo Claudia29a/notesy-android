@@ -12,7 +12,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.notesy.data.api.RetrofitInstance
 import com.example.notesy.data.local.NotesDatabase
+import com.example.notesy.data.model.Folder
 import com.example.notesy.data.model.Note
+import com.example.notesy.data.repository.FolderRepository
 import com.example.notesy.data.repository.NoteRepository
 import com.example.notesy.data.worker.SyncWorker
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +24,11 @@ import kotlinx.coroutines.launch
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = NotesDatabase.getDatabase(application)
-    private val repository = NoteRepository(RetrofitInstance.api, database.noteDao())
+    private val noteRepository = NoteRepository(RetrofitInstance.api, database.noteDao())
+    private val folderRepository = FolderRepository(RetrofitInstance.api, database.folderDao())
+
+    private val _folders = MutableStateFlow<List<Folder>>(emptyList())
+    val folders: StateFlow<List<Folder>> = _folders
 
     private val _notes = MutableStateFlow<List<Note>>(emptyList())
     val notes: StateFlow<List<Note>> = _notes
@@ -33,9 +39,19 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val _noteCreated = MutableStateFlow(false)
     val noteCreated: StateFlow<Boolean> = _noteCreated
 
+    private val _folderCreated = MutableStateFlow(false)
+    val folderCreated: StateFlow<Boolean> = _folderCreated
+
     init {
         viewModelScope.launch {
-            repository.getAllNotesFlow().collect { notesList ->
+            folderRepository.getAllFoldersFlow().collect { foldersList ->
+                _folders.value = foldersList
+                Log.d("NotesViewModel", "Folders updated from database: ${foldersList.size}")
+            }
+        }
+
+        viewModelScope.launch {
+            noteRepository.getAllNotesFlow().collect { notesList ->
                 _notes.value = notesList
                 Log.d("NotesViewModel", "Notes updated from database: ${notesList.size}")
             }
@@ -48,7 +64,8 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                repository.syncWithBackend()
+                folderRepository.syncWithBackend()
+                noteRepository.syncWithBackend()
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Sync failed", e)
             } finally {
@@ -58,11 +75,56 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun createNote(title: String, items: List<String>) {
+    fun createFolder(name: String) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                repository.createNote(title, items)
+                folderRepository.createFolder(name)
+                scheduleSync()
+                _folderCreated.value = true
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Failed to create folder", e)
+                _folderCreated.value = true
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun updateFolder(id: String, name: String) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                folderRepository.updateFolder(id, name)
+                scheduleSync()
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Failed to update folder", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun deleteFolder(id: String) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                folderRepository.deleteFolder(id)
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Error deleting folder", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun createNote(title: String, items: List<String>, folderId: String? = null) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                noteRepository.createNote(title, items, folderId)
                 scheduleSync()
                 _noteCreated.value = true
             } catch (e: Exception) {
@@ -75,11 +137,11 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun updateNote(id: String, title: String, items: List<String>) {
+    fun updateNote(id: String, title: String, items: List<String>, folderId: String? = null) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                repository.updateNote(id, title, items)
+                noteRepository.updateNote(id, title, items, folderId)
                 scheduleSync()
                 _noteCreated.value = true
             } catch (e: Exception) {
@@ -107,11 +169,15 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         _noteCreated.value = false
     }
 
+    fun resetFolderCreated() {
+        _folderCreated.value = false
+    }
+
     fun deleteNote(id: String) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                repository.deleteNote(id)
+                noteRepository.deleteNote(id)
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Error deleting note", e)
             } finally {

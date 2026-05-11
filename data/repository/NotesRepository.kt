@@ -26,6 +26,18 @@ class NoteRepository(
         }
     }
 
+    fun getNotesByFolderFlow(folderId: String): Flow<List<Note>> {
+        return noteDao.getNotesByFolder(folderId).map { entities ->
+            entities.map { it.toNote() }
+        }
+    }
+
+    fun getNotesWithoutFolderFlow(): Flow<List<Note>> {
+        return noteDao.getNotesWithoutFolder().map { entities ->
+            entities.map { it.toNote() }
+        }
+    }
+
     suspend fun syncWithBackend() {
         try {
             val unsyncedNotes = noteDao.getUnsyncedNotes()
@@ -40,7 +52,8 @@ class NoteRepository(
                     val createdNote = apiService.createNote(
                         CreateNoteRequest(
                             title = localNote.title,
-                            items = itemsList
+                            items = itemsList,
+                            folderId = localNote.folderId
                         )
                     )
 
@@ -58,11 +71,12 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun createNote(title: String, items: List<String>) {
+    suspend fun createNote(title: String, items: List<String>, folderId: String? = null) {
         val localNote = NoteEntity(
             id = UUID.randomUUID().toString(),
             title = title,
             items = Gson().toJson(items),
+            folderId = folderId,
             createdAt = Instant.now().toString(),
             isSynced = false
         )
@@ -71,7 +85,11 @@ class NoteRepository(
 
         try {
             val createdNote = apiService.createNote(
-                CreateNoteRequest(title = title, items = items)
+                CreateNoteRequest(
+                    title = title,
+                    items = items,
+                    folderId = folderId
+                )
             )
 
             noteDao.deleteNoteById(localNote.id)
@@ -81,12 +99,13 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun updateNote(id: String, title: String, items: List<String>) {
+    suspend fun updateNote(id: String, title: String, items: List<String>, folderId: String? = null) {
         val existingNote = noteDao.getNoteById(id)
         val updatedNote = NoteEntity(
             id = id,
             title = title,
             items = Gson().toJson(items),
+            folderId = folderId,
             createdAt = existingNote?.createdAt ?: Instant.now().toString(),
             isSynced = false
         )
@@ -96,7 +115,11 @@ class NoteRepository(
         try {
             val serverNote = apiService.updateNote(
                 id = id,
-                request = CreateNoteRequest(title = title, items = items)
+                request = CreateNoteRequest(
+                    title = title,
+                    items = items,
+                    folderId = folderId
+                )
             )
 
             noteDao.insertNote(serverNote.toEntity(isSynced = true))

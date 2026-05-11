@@ -12,6 +12,12 @@ interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY createdAt DESC")
     fun getAllNotes(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM notes WHERE folderId = :folderId ORDER BY createdAt DESC")
+    fun getNotesByFolder(folderId: String): Flow<List<NoteEntity>>
+
+    @Query("SELECT * FROM notes WHERE folderId IS NULL ORDER BY createdAt DESC")
+    fun getNotesWithoutFolder(): Flow<List<NoteEntity>>
+
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getNoteById(id: String): NoteEntity?
 

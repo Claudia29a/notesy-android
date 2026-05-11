@@ -9,7 +9,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.notesy.ui.screens.AddNoteScreen
-import com.example.notesy.ui.screens.NotesListScreen
+import com.example.notesy.ui.screens.FolderNotesScreen
+import com.example.notesy.ui.screens.FoldersListScreen
 import com.example.notesy.ui.theme.NotesyTheme
 import com.example.notesy.ui.viewmodel.NotesViewModel
 
@@ -31,13 +32,30 @@ fun NotesyApp() {
 
     NavHost(
         navController = navController,
-        startDestination = "notes_list"
+        startDestination = "folders_list"
     ) {
-        composable("notes_list") {
-            NotesListScreen(
+        composable("folders_list") {
+            FoldersListScreen(
                 viewModel = viewModel,
+                onFolderClick = { folderId ->
+                    navController.navigate("folder_notes/$folderId")
+                },
+                onViewAllNotes = {
+                    navController.navigate("folder_notes/null")
+                }
+            )
+        }
+
+        composable("folder_notes/{folderId}") { backStackEntry ->
+            val folderId = backStackEntry.arguments?.getString("folderId")
+            val actualFolderId = if (folderId == "null") null else folderId
+
+            FolderNotesScreen(
+                viewModel = viewModel,
+                folderId = actualFolderId,
+                onNavigateBack = { navController.popBackStack() },
                 onAddNoteClick = {
-                    navController.navigate("add_note")
+                    navController.navigate("add_note/$folderId")
                 },
                 onEditNoteClick = { noteId ->
                     navController.navigate("edit_note/$noteId")
@@ -45,24 +63,26 @@ fun NotesyApp() {
             )
         }
 
-        composable("add_note") {
+        composable("add_note/{folderId}") { backStackEntry ->
+            val folderId = backStackEntry.arguments?.getString("folderId")
+            val actualFolderId = if (folderId == "null") null else folderId
+
             AddNoteScreen(
                 viewModel = viewModel,
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                noteId = null
+                onNavigateBack = { navController.popBackStack() },
+                noteId = null,
+                folderId = actualFolderId
             )
         }
 
         composable("edit_note/{noteId}") { backStackEntry ->
             val noteId = backStackEntry.arguments?.getString("noteId")
+
             AddNoteScreen(
                 viewModel = viewModel,
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                noteId = noteId
+                onNavigateBack = { navController.popBackStack() },
+                noteId = noteId,
+                folderId = null
             )
         }
     }
