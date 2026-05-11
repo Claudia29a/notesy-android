@@ -1,5 +1,6 @@
 package com.example.notesy.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,7 +21,8 @@ import com.example.notesy.ui.viewmodel.NotesViewModel
 @Composable
 fun NotesListScreen(
     viewModel: NotesViewModel,
-    onAddNoteClick: () -> Unit
+    onAddNoteClick: () -> Unit,
+    onEditNoteClick: (String) -> Unit
 ) {
     val notes by viewModel.notes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -66,7 +68,8 @@ fun NotesListScreen(
                 items(notes) { note ->
                     NoteCard(
                         note = note,
-                        onDelete = { viewModel.deleteNote(note.id) }
+                        onDelete = { viewModel.deleteNote(note.id) },
+                        onClick = { onEditNoteClick(note.id) }
                     )
                 }
             }
@@ -77,10 +80,13 @@ fun NotesListScreen(
 @Composable
 fun NoteCard(
     note: Note,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)

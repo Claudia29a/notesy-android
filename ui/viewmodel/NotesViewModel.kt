@@ -1,7 +1,9 @@
 package com.example.notesy.ui.viewmodel
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
@@ -55,6 +57,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun createNote(title: String, items: List<String>) {
         viewModelScope.launch {
             try {
@@ -64,6 +67,23 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 _noteCreated.value = true
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Failed to create note", e)
+                _noteCreated.value = true
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun updateNote(id: String, title: String, items: List<String>) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                repository.updateNote(id, title, items)
+                scheduleSync()
+                _noteCreated.value = true
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Failed to update note", e)
                 _noteCreated.value = true
             } finally {
                 _isLoading.value = false

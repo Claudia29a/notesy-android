@@ -12,24 +12,31 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.notesy.data.model.Note
 import com.example.notesy.ui.viewmodel.NotesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddNoteScreen(
     viewModel: NotesViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    noteId: String? = null
 ) {
-    var title by remember { mutableStateOf("") }
-    var items by remember { mutableStateOf(listOf("")) }
+    val notes by viewModel.notes.collectAsState()
+    val existingNote = noteId?.let { id ->
+        notes.find { it.id == id }
+    }
 
-    // Observe note creation state
+    var title by remember(existingNote) { mutableStateOf(existingNote?.title ?: "") }
+    var items by remember(existingNote) {
+        mutableStateOf(existingNote?.items?.toList() ?: listOf(""))
+    }
+
     val noteCreated by viewModel.noteCreated.collectAsState()
 
-    // Navigate back when note is created
     LaunchedEffect(noteCreated) {
         if (noteCreated) {
-            Log.d("AddNoteScreen", "✅ Note created successfully, navigating back")
+            Log.d("AddNoteScreen", "✅ Note saved successfully, navigating back")
             viewModel.resetNoteCreated()
             onNavigateBack()
         }
@@ -38,7 +45,7 @@ fun AddNoteScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Note") },
+                title = { Text(if (existingNote != null) "Edit Note" else "New Note") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -58,8 +65,14 @@ fun AddNoteScreen(
                                 Log.d("AddNoteScreen", "✅ Validation passed")
                                 Log.d("AddNoteScreen", "Valid items count: ${validItems.size}")
                                 Log.d("AddNoteScreen", "Valid items: $validItems")
-                                Log.d("AddNoteScreen", "🚀 Calling viewModel.createNote()")
-                                viewModel.createNote(title, validItems)
+
+                                if (existingNote != null) {
+                                    Log.d("AddNoteScreen", "🔄 Updating existing note with ID: ${existingNote.id}")
+                                    viewModel.updateNote(existingNote.id, title, validItems)
+                                } else {
+                                    Log.d("AddNoteScreen", "🚀 Creating new note")
+                                    viewModel.createNote(title, validItems)
+                                }
                             } else {
                                 Log.w("AddNoteScreen", "❌ Validation FAILED")
                                 Log.w("AddNoteScreen", "Title blank? ${title.isBlank()}")

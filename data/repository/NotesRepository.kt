@@ -1,5 +1,7 @@
 package com.example.notesy.data.repository
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import com.example.notesy.data.api.NoteApiService
 import com.example.notesy.data.local.NoteDao
 import com.example.notesy.data.local.NoteEntity
@@ -55,6 +57,7 @@ class NoteRepository(
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     suspend fun createNote(title: String, items: List<String>) {
         val localNote = NoteEntity(
             id = UUID.randomUUID().toString(),
@@ -73,6 +76,30 @@ class NoteRepository(
 
             noteDao.deleteNoteById(localNote.id)
             noteDao.insertNote(createdNote.toEntity(isSynced = true))
+        } catch (_: Exception) {
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun updateNote(id: String, title: String, items: List<String>) {
+        val existingNote = noteDao.getNoteById(id)
+        val updatedNote = NoteEntity(
+            id = id,
+            title = title,
+            items = Gson().toJson(items),
+            createdAt = existingNote?.createdAt ?: Instant.now().toString(),
+            isSynced = false
+        )
+
+        noteDao.insertNote(updatedNote)
+
+        try {
+            val serverNote = apiService.updateNote(
+                id = id,
+                request = CreateNoteRequest(title = title, items = items)
+            )
+
+            noteDao.insertNote(serverNote.toEntity(isSynced = true))
         } catch (_: Exception) {
         }
     }

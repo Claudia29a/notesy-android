@@ -38,6 +38,9 @@ fun NotesyApp() {
                 viewModel = viewModel,
                 onAddNoteClick = {
                     navController.navigate("add_note")
+                },
+                onEditNoteClick = { noteId ->
+                    navController.navigate("edit_note/$noteId")
                 }
             )
         }
@@ -47,7 +50,19 @@ fun NotesyApp() {
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack()
-                }
+                },
+                noteId = null
+            )
+        }
+
+        composable("edit_note/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")
+            AddNoteScreen(
+                viewModel = viewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                noteId = noteId
             )
         }
     }
