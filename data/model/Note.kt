@@ -6,14 +6,14 @@ import kotlinx.serialization.Serializable
 data class Note(
     val id: String,
     val title: String,
-    val items: List<String>,
-    val folderId: String? = null,
+    val content: String,
+    val folderId: String?,
     val createdAt: String
 )
 
 @Serializable
 data class CreateNoteRequest(
     val title: String,
-    val items: List<String>,
+    val content: String,
     val folderId: String? = null
 )

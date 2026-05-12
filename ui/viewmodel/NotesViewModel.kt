@@ -120,11 +120,11 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun createNote(title: String, items: List<String>, folderId: String? = null) {
+    fun createNote(title: String, content: String, folderId: String? = null) {  // Changed from items: List<String>
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                noteRepository.createNote(title, items, folderId)
+                noteRepository.createNote(title, content, folderId)  // Changed from items
                 scheduleSync()
                 _noteCreated.value = true
             } catch (e: Exception) {
@@ -137,11 +137,11 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun updateNote(id: String, title: String, items: List<String>, folderId: String? = null) {
+    fun updateNote(id: String, title: String, content: String, folderId: String? = null) {  // Changed from items: List<String>
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                noteRepository.updateNote(id, title, items, folderId)
+                noteRepository.updateNote(id, title, content, folderId)  // Changed from items
                 scheduleSync()
                 _noteCreated.value = true
             } catch (e: Exception) {

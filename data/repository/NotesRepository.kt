@@ -9,7 +9,6 @@ import com.example.notesy.data.local.toEntity
 import com.example.notesy.data.local.toNote
 import com.example.notesy.data.model.CreateNoteRequest
 import com.example.notesy.data.model.Note
-import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -44,15 +43,10 @@ class NoteRepository(
 
             unsyncedNotes.forEach { localNote ->
                 try {
-                    val itemsList = Gson().fromJson(
-                        localNote.items,
-                        Array<String>::class.java
-                    ).toList()
-
                     val createdNote = apiService.createNote(
                         CreateNoteRequest(
                             title = localNote.title,
-                            items = itemsList,
+                            content = localNote.content,  // Changed from items
                             folderId = localNote.folderId
                         )
                     )
@@ -71,11 +65,11 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun createNote(title: String, items: List<String>, folderId: String? = null) {
+    suspend fun createNote(title: String, content: String, folderId: String? = null) {  // Changed from items
         val localNote = NoteEntity(
             id = UUID.randomUUID().toString(),
             title = title,
-            items = Gson().toJson(items),
+            content = content,  // Changed from items and removed JSON conversion
             folderId = folderId,
             createdAt = Instant.now().toString(),
             isSynced = false
@@ -87,7 +81,7 @@ class NoteRepository(
             val createdNote = apiService.createNote(
                 CreateNoteRequest(
                     title = title,
-                    items = items,
+                    content = content,  // Changed from items
                     folderId = folderId
                 )
             )
@@ -99,12 +93,12 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun updateNote(id: String, title: String, items: List<String>, folderId: String? = null) {
+    suspend fun updateNote(id: String, title: String, content: String, folderId: String? = null) {  // Changed from items
         val existingNote = noteDao.getNoteById(id)
         val updatedNote = NoteEntity(
             id = id,
             title = title,
-            items = Gson().toJson(items),
+            content = content,  // Changed from items and removed JSON conversion
             folderId = folderId,
             createdAt = existingNote?.createdAt ?: Instant.now().toString(),
             isSynced = false
@@ -117,7 +111,7 @@ class NoteRepository(
                 id = id,
                 request = CreateNoteRequest(
                     title = title,
-                    items = items,
+                    content = content,  // Changed from items
                     folderId = folderId
                 )
             )
