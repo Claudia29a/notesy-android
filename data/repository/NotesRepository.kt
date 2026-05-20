@@ -43,17 +43,29 @@ class NoteRepository(
 
             unsyncedNotes.forEach { localNote ->
                 try {
-                    val createdNote = apiService.createNote(
-                        CreateNoteRequest(
+                    val updatedNote = apiService.updateNote(
+                        id = localNote.id,
+                        request = CreateNoteRequest(
                             title = localNote.title,
-                            content = localNote.content,  // Changed from items
+                            content = localNote.content,
                             folderId = localNote.folderId
                         )
                     )
-
-                    noteDao.deleteNoteById(localNote.id)
-                    noteDao.insertNote(createdNote.toEntity(isSynced = true))
+                    noteDao.insertNote(updatedNote.toEntity(isSynced = true))
                 } catch (_: Exception) {
+                    try {
+                        val createdNote = apiService.createNote(
+                            CreateNoteRequest(
+                                title = localNote.title,
+                                content = localNote.content,
+                                folderId = localNote.folderId
+                            )
+                        )
+
+                        noteDao.deleteNoteById(localNote.id)
+                        noteDao.insertNote(createdNote.toEntity(isSynced = true))
+                    } catch (_: Exception) {
+                    }
                 }
             }
 
@@ -65,11 +77,11 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun createNote(title: String, content: String, folderId: String? = null) {  // Changed from items
+    suspend fun createNote(title: String, content: String, folderId: String? = null) {
         val localNote = NoteEntity(
             id = UUID.randomUUID().toString(),
             title = title,
-            content = content,  // Changed from items and removed JSON conversion
+            content = content,
             folderId = folderId,
             createdAt = Instant.now().toString(),
             isSynced = false
@@ -81,7 +93,7 @@ class NoteRepository(
             val createdNote = apiService.createNote(
                 CreateNoteRequest(
                     title = title,
-                    content = content,  // Changed from items
+                    content = content,
                     folderId = folderId
                 )
             )
@@ -93,12 +105,12 @@ class NoteRepository(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun updateNote(id: String, title: String, content: String, folderId: String? = null) {  // Changed from items
+    suspend fun updateNote(id: String, title: String, content: String, folderId: String? = null) {
         val existingNote = noteDao.getNoteById(id)
         val updatedNote = NoteEntity(
             id = id,
             title = title,
-            content = content,  // Changed from items and removed JSON conversion
+            content = content,
             folderId = folderId,
             createdAt = existingNote?.createdAt ?: Instant.now().toString(),
             isSynced = false
@@ -111,7 +123,7 @@ class NoteRepository(
                 id = id,
                 request = CreateNoteRequest(
                     title = title,
-                    content = content,  // Changed from items
+                    content = content,
                     folderId = folderId
                 )
             )

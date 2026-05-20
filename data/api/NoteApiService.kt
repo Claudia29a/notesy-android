@@ -1,5 +1,7 @@
 package com.example.notesy.data.api
 
+import com.example.notesy.data.model.AiSuggestRequest
+import com.example.notesy.data.model.AiSuggestResponse
 import com.example.notesy.data.model.CreateFolderRequest
 import com.example.notesy.data.model.CreateNoteRequest
 import com.example.notesy.data.model.Folder
@@ -44,4 +46,7 @@ interface NoteApiService {
 
     @DELETE("notes/{id}")
     suspend fun deleteNote(@Path("id") id: String)
+
+    @POST("ai/suggest-groceries")
+    suspend fun suggestGroceries(@Body request: AiSuggestRequest): AiSuggestResponse
 }
