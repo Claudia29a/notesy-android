@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
@@ -74,6 +77,8 @@ fun AddNoteScreen(
             )
         )
     }
+
+    val contentScrollState = rememberScrollState()
 
     LaunchedEffect(noteCreated) {
         if (noteCreated) {
@@ -137,6 +142,7 @@ fun AddNoteScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .padding(16.dp)
         ) {
             OutlinedTextField(
@@ -179,19 +185,6 @@ fun AddNoteScreen(
                 ) {
                     Icon(Icons.Default.FormatBold, contentDescription = "Bold markers")
                 }
-
-                if (existingNote != null) {
-                    IconButton(
-                        onClick = {
-                            viewModel.onSuggestGroceriesClicked(existingNote.id)
-                        }
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = "AI suggestions"
-                        )
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -202,7 +195,8 @@ fun AddNoteScreen(
                 label = { Text("Content") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .verticalScroll(contentScrollState),
                 minLines = 10,
                 maxLines = Int.MAX_VALUE
             )
