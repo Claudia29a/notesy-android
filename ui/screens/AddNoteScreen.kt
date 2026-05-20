@@ -19,16 +19,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.MoreVert
@@ -62,8 +62,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -119,7 +119,7 @@ fun AddNoteScreen(
 
     var activeLineId by remember { mutableStateOf<Long?>(null) }
     var pendingFocusLineId by remember { mutableStateOf<Long?>(null) }
-    val contentScrollState = rememberScrollState()
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(noteCreated) {
         if (noteCreated) {
@@ -250,6 +250,27 @@ fun AddNoteScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
+
+                    IconButton(onClick = { saveCurrentNote() }) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Save",
+                            tint = NotesyNavy,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    if (existingNote != null) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete note",
+                                tint = NotesyNavy,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
                     IconButton(onClick = {}) {
                         Icon(
                             imageVector = Icons.Default.Folder,
@@ -258,10 +279,11 @@ fun AddNoteScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                    IconButton(onClick = { saveCurrentNote() }) {
+
+                    IconButton(onClick = {}) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Save",
+                            contentDescription = "More",
                             tint = NotesyNavy,
                             modifier = Modifier.size(24.dp)
                         )
@@ -281,7 +303,6 @@ fun AddNoteScreen(
                 .imePadding()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
-                .padding(16.dp)
         ) {
             item {
                 Row(
@@ -323,27 +344,187 @@ fun AddNoteScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                IconButton(
-                    onClick = {
-                        contentField = wrapSelection(contentField, "**")
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { insertLineAfterActive(checked = null, prefix = "• ") }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                                    contentDescription = "Bullet point",
+                                    tint = NotesyNavy,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(onClick = { insertLineAfterActive(checked = false) }) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckBox,
+                                    contentDescription = "Checklist",
+                                    tint = NotesyNavy,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(onClick = { toggleBoldAtActiveLine() }) {
+                                Icon(
+                                    imageVector = Icons.Default.FormatBold,
+                                    contentDescription = "Bold",
+                                    tint = NotesyNavy,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
-                ) {
-                    Icon(Icons.Default.FormatBold, contentDescription = "Bold markers")
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                if (existingNote != null) {
+                                    viewModel.onSuggestGroceriesClicked(existingNote.id)
+                                }
+                            }
+                            .padding(top = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "AI suggestions",
+                            tint = NotesyGold,
+                            modifier = Modifier.size(34.dp)
+                        )
+                        Text(
+                            text = "AI suggestions",
+                            color = NotesyGold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            items(noteLines, key = { it.id }) { line ->
+                val index = noteLines.indexOfFirst { it.id == line.id }
+                if (index == -1) return@items
 
-            OutlinedTextField(
-                value = contentField,
-                onValueChange = { contentField = it },
-                label = { Text("Content") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(contentScrollState),
-                minLines = 10,
-                maxLines = Int.MAX_VALUE
+                when {
+                    line.checked != null -> {
+                        EditableChecklistRow(
+                            item = line,
+                            requestFocus = pendingFocusLineId == line.id,
+                            onFocusHandled = {
+                                if (pendingFocusLineId == line.id) pendingFocusLineId = null
+                            },
+                            onFocused = { activeLineId = line.id },
+                            onToggle = {
+                                noteLines[index] = line.copy(checked = !(line.checked ?: false))
+                            },
+                            onTextChange = { newValue ->
+                                noteLines[index] = line.copy(value = newValue)
+                            },
+                            onEnterPressed = {
+                                val newLine = NoteLineUi(
+                                    id = nextLineId,
+                                    value = TextFieldValue("", TextRange(0)),
+                                    checked = false
+                                )
+                                nextLineId += 1L
+                                noteLines.add(index + 1, newLine)
+                                pendingFocusLineId = newLine.id
+                            },
+                            onBackspaceAtEmpty = {
+                                if (noteLines.size > 1) {
+                                    val focusTarget = noteLines.getOrNull(index - 1)?.id
+                                        ?: noteLines.getOrNull(index + 1)?.id
+                                    noteLines.removeAt(index)
+                                    pendingFocusLineId = focusTarget
+                                } else {
+                                    noteLines[index] = line.copy(
+                                        checked = false,
+                                        value = TextFieldValue("", TextRange(0))
+                                    )
+                                    pendingFocusLineId = line.id
+                                }
+                            }
+                        )
+                    }
+
+                    isSectionHeader(line.value.text) -> {
+                        EditablePlainLine(
+                            value = line.value,
+                            onValueChange = { newValue ->
+                                noteLines[index] = line.copy(value = newValue)
+                            },
+                            onFocused = { activeLineId = line.id },
+                            textStyle = TextStyle(
+                                color = NotesyNavy,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Normal
+                            )
+                        )
+                    }
+
+                    else -> {
+                        EditablePlainLine(
+                            value = line.value,
+                            onValueChange = { newValue ->
+                                noteLines[index] = line.copy(value = newValue)
+                            },
+                            onFocused = { activeLineId = line.id },
+                            textStyle = TextStyle(
+                                color = NotesyNavy,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Normal,
+                                lineHeight = 24.sp
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showDeleteDialog && existingNote != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                containerColor = NotesyBlueSheet,
+                shape = RoundedCornerShape(22.dp),
+                title = {
+                    Text(
+                        text = "Delete note?",
+                        color = NotesyNavy,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = "This action cannot be undone.",
+                        color = NotesyNavy
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            viewModel.deleteNote(existingNote.id)
+                            onNavigateBack()
+                        }
+                    ) {
+                        Text(
+                            text = "Delete",
+                            color = NotesyGold,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showDeleteDialog = false }
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = NotesyNavy
+                        )
+                    }
+                }
             )
         }
 
@@ -378,9 +559,7 @@ fun AddNoteScreen(
                             LazyColumn(
                                 modifier = Modifier.heightIn(max = 320.dp)
                             ) {
-                                items(groceryDialogState.suggestions.size) { index ->
-                                    val suggestion = groceryDialogState.suggestions[index]
-
+                                items(groceryDialogState.suggestions) { suggestion ->
                                     ListItem(
                                         headlineContent = {
                                             Text(
@@ -459,7 +638,8 @@ private fun EditableChecklistRow(
     onFocused: () -> Unit,
     onToggle: () -> Unit,
     onTextChange: (TextFieldValue) -> Unit,
-    onEnterPressed: () -> Unit
+    onEnterPressed: () -> Unit,
+    onBackspaceAtEmpty: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -498,11 +678,21 @@ private fun EditableChecklistRow(
                     if (it.isFocused) onFocused()
                 }
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                        onEnterPressed()
-                        true
-                    } else {
-                        false
+                    when {
+                        event.type == KeyEventType.KeyDown &&
+                                event.key == Key.Enter -> {
+                            onEnterPressed()
+                            true
+                        }
+
+                        event.type == KeyEventType.KeyDown &&
+                                event.key == Key.Backspace &&
+                                item.value.text.isEmpty() -> {
+                            onBackspaceAtEmpty()
+                            true
+                        }
+
+                        else -> false
                     }
                 },
             decorationBox = { innerTextField -> innerTextField() }
