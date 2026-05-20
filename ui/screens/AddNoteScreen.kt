@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
@@ -116,6 +119,7 @@ fun AddNoteScreen(
 
     var activeLineId by remember { mutableStateOf<Long?>(null) }
     var pendingFocusLineId by remember { mutableStateOf<Long?>(null) }
+    val contentScrollState = rememberScrollState()
 
     LaunchedEffect(noteCreated) {
         if (noteCreated) {
@@ -277,6 +281,7 @@ fun AddNoteScreen(
                 .imePadding()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(16.dp)
         ) {
             item {
                 Row(
@@ -318,127 +323,28 @@ fun AddNoteScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { insertLineAfterActive(checked = null, prefix = "• ") }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
-                                    contentDescription = "Bullet point",
-                                    tint = NotesyNavy,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            IconButton(onClick = { insertLineAfterActive(checked = false) }) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckBox,
-                                    contentDescription = "Checklist",
-                                    tint = NotesyNavy,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            IconButton(onClick = { toggleBoldAtActiveLine() }) {
-                                Icon(
-                                    imageVector = Icons.Default.FormatBold,
-                                    contentDescription = "Bold",
-                                    tint = NotesyNavy,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                IconButton(
+                    onClick = {
+                        contentField = wrapSelection(contentField, "**")
                     }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clickable {
-                                if (existingNote != null) {
-                                    viewModel.onSuggestGroceriesClicked(existingNote.id)
-                                }
-                            }
-                            .padding(top = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "AI suggestions",
-                            tint = NotesyGold,
-                            modifier = Modifier.size(34.dp)
-                        )
-                        Text(
-                            text = "AI suggestions",
-                            color = NotesyGold,
-                            fontSize = 12.sp
-                        )
-                    }
+                ) {
+                    Icon(Icons.Default.FormatBold, contentDescription = "Bold markers")
                 }
             }
 
-            items(noteLines.size, key = { noteLines[it].id }) { index ->
-                val line = noteLines[index]
+            Spacer(modifier = Modifier.height(8.dp))
 
-                when {
-                    line.checked != null -> {
-                        EditableChecklistRow(
-                            item = line,
-                            requestFocus = pendingFocusLineId == line.id,
-                            onFocusHandled = {
-                                if (pendingFocusLineId == line.id) pendingFocusLineId = null
-                            },
-                            onFocused = { activeLineId = line.id },
-                            onToggle = {
-                                noteLines[index] = line.copy(checked = !(line.checked ?: false))
-                            },
-                            onTextChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
-                            },
-                            onEnterPressed = {
-                                val newLine = NoteLineUi(
-                                    id = nextLineId,
-                                    value = TextFieldValue("", TextRange(0)),
-                                    checked = false
-                                )
-                                nextLineId += 1L
-                                noteLines.add(index + 1, newLine)
-                                pendingFocusLineId = newLine.id
-                            }
-                        )
-                    }
-
-                    isSectionHeader(line.value.text) -> {
-                        EditablePlainLine(
-                            value = line.value,
-                            onValueChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
-                            },
-                            onFocused = { activeLineId = line.id },
-                            textStyle = TextStyle(
-                                color = NotesyNavy,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        )
-                    }
-
-                    else -> {
-                        EditablePlainLine(
-                            value = line.value,
-                            onValueChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
-                            },
-                            onFocused = { activeLineId = line.id },
-                            textStyle = TextStyle(
-                                color = NotesyNavy,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Normal,
-                                lineHeight = 24.sp
-                            )
-                        )
-                    }
-                }
-            }
+            OutlinedTextField(
+                value = contentField,
+                onValueChange = { contentField = it },
+                label = { Text("Content") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(contentScrollState),
+                minLines = 10,
+                maxLines = Int.MAX_VALUE
+            )
         }
 
         if (groceryDialogState.visible && existingNote != null) {
