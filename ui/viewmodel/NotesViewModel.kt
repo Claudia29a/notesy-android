@@ -118,6 +118,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _isLoading.value = true
                 folderRepository.deleteFolder(id)
+                scheduleSync()
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Error deleting folder", e)
             } finally {
@@ -306,6 +307,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _isLoading.value = true
                 noteRepository.deleteNote(id)
+                scheduleSync()
             } catch (e: Exception) {
                 Log.e("NotesViewModel", "Error deleting note", e)
             } finally {

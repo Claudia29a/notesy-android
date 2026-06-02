@@ -91,7 +91,9 @@ fun AddNoteScreen(
     viewModel: NotesViewModel,
     onNavigateBack: () -> Unit,
     noteId: String? = null,
-    folderId: String? = null
+    folderId: String? = null,
+    onFolderScreenClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val notes by viewModel.notes.collectAsState()
     val folders by viewModel.folders.collectAsState()
@@ -242,7 +244,7 @@ fun AddNoteScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
+                    IconButton(onClick = onSettingsClick) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
@@ -271,7 +273,7 @@ fun AddNoteScreen(
                         }
                     }
 
-                    IconButton(onClick = {}) {
+                    IconButton(onClick = onFolderScreenClick) {
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = "Folder",
@@ -318,7 +320,7 @@ fun AddNoteScreen(
                             onValueChange = { title = it },
                             textStyle = TextStyle(
                                 color = NotesyNavy,
-                                fontSize = 28.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Normal
                             ),
                             modifier = Modifier.fillMaxWidth(),
@@ -327,7 +329,7 @@ fun AddNoteScreen(
                                     Text(
                                         text = "Note title",
                                         color = NotesyNavy.copy(alpha = 0.45f),
-                                        fontSize = 28.sp
+                                        fontSize = 22.sp
                                     )
                                 }
                                 innerTextField()
@@ -457,7 +459,7 @@ fun AddNoteScreen(
                             onFocused = { activeLineId = line.id },
                             textStyle = TextStyle(
                                 color = NotesyNavy,
-                                fontSize = 24.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Normal
                             )
                         )
@@ -472,7 +474,7 @@ fun AddNoteScreen(
                             onFocused = { activeLineId = line.id },
                             textStyle = TextStyle(
                                 color = NotesyNavy,
-                                fontSize = 19.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Normal,
                                 lineHeight = 24.sp
                             )

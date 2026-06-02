@@ -23,12 +23,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,7 +40,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -61,6 +62,7 @@ private val NotesyNavy = Color(0xFF24345D)
 private val NotesyYellow = Color(0xFFF1E39A)
 private val NotesyFabBlue = Color(0xFF9CB6E3)
 private val NotesyShadowYellow = Color(0xFFE8C84C)
+private val NotesyDeleteRed = Color(0xFFB34747)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +70,8 @@ private val NotesyShadowYellow = Color(0xFFE8C84C)
 fun FoldersListScreen(
     viewModel: NotesViewModel,
     onFolderClick: (String) -> Unit,
-    onViewAllNotes: () -> Unit
+    onViewAllNotes: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val folders by viewModel.folders.collectAsState()
     val notes by viewModel.notes.collectAsState()
@@ -76,6 +79,7 @@ fun FoldersListScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var folderToDelete by remember { mutableStateOf<Folder?>(null) }
 
     val filteredFolders = folders.filter {
         it.name.contains(searchQuery, ignoreCase = true)
@@ -86,25 +90,31 @@ fun FoldersListScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Notesy",
-                        color = Color.Black,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Notesy",
+                            color = Color.Black,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = NotesyNavy,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = NotesyBg
                 ),
-                actions = {
-                    IconButton(onClick = { onViewAllNotes() }) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = "All Notes",
-                            tint = NotesyNavy
-                        )
-                    }
-                },
                 modifier = Modifier.statusBarsPadding()
             )
         },
@@ -145,7 +155,7 @@ fun FoldersListScreen(
                 Text(
                     text = "Folders",
                     color = Color.Black,
-                    fontSize = 26.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Normal
                 )
 
@@ -211,7 +221,8 @@ fun FoldersListScreen(
                             FolderPillCard(
                                 folder = folder,
                                 noteCount = notes.count { it.folderId == folder.id },
-                                onClick = { onFolderClick(folder.id) }
+                                onClick = { onFolderClick(folder.id) },
+                                onDeleteClick = { folderToDelete = folder }
                             )
                         }
                     }
@@ -229,13 +240,25 @@ fun FoldersListScreen(
             }
         )
     }
+
+    if (folderToDelete != null) {
+        DeleteFolderDialog(
+            folderName = folderToDelete!!.name,
+            onDismiss = { folderToDelete = null },
+            onConfirmDelete = {
+                viewModel.deleteFolder(folderToDelete!!.id)
+                folderToDelete = null
+            }
+        )
+    }
 }
 
 @Composable
 private fun FolderPillCard(
     folder: Folder,
     noteCount: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -254,9 +277,21 @@ private fun FolderPillCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(84.dp),
+                .height(84.dp)
+                .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center
         ) {
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete folder",
+                    tint = NotesyDeleteRed
+                )
+            }
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -264,7 +299,7 @@ private fun FolderPillCard(
                     text = folder.name,
                     color = Color.Black,
                     fontSize = 22.sp,
-                    fontWeight = FontWeight.Normal
+                    fontWeight = FontWeight.SemiBold
                 )
 
                 if (noteCount > 0) {
@@ -324,6 +359,48 @@ private fun CreateFolderDialog(
                 Text(
                     text = "Create",
                     color = NotesyNavy,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "Cancel",
+                    color = NotesyNavy
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeleteFolderDialog(
+    folderName: String,
+    onDismiss: () -> Unit,
+    onConfirmDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = NotesyBg,
+        title = {
+            Text(
+                text = "Delete Folder",
+                color = NotesyDeleteRed,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text(
+                text = "Are you sure you want to delete \"$folderName\"?",
+                color = NotesyNavy
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirmDelete) {
+                Text(
+                    text = "Delete",
+                    color = NotesyDeleteRed,
                     fontWeight = FontWeight.Bold
                 )
             }
