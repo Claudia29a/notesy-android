@@ -56,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.notesy.data.model.Note
 import com.example.notesy.ui.viewmodel.NotesViewModel
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 private val NotesyBg = Color(0xFFF6F3EC)
 private val NotesyNavy = Color(0xFF24345D)
@@ -63,6 +66,18 @@ private val NotesyYellow = Color(0xFFF6E79C)
 private val NotesyFabBlue = Color(0xFF9CB6E3)
 private val NotesyShadowYellow = Color(0xFFE8C84C)
 private val NotesySearchBlue = Color(0xFF5373A8)
+
+private val folderNotesJson = Json {
+    ignoreUnknownKeys = true
+    prettyPrint = false
+}
+
+@Serializable
+private data class FolderNoteBlockDto(
+    val type: String,
+    val text: String,
+    val checked: Boolean? = null
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,8 +105,9 @@ fun FolderNotesScreen(
     }
 
     val filteredNotes = folderNotes.filter { note ->
+        val searchableContent = extractPlainTextFromContent(note.content)
         note.title.contains(searchQuery, ignoreCase = true) ||
-                note.content.contains(searchQuery, ignoreCase = true)
+                searchableContent.contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -302,10 +318,7 @@ private fun FolderNoteCard(
     note: Note,
     onClick: () -> Unit
 ) {
-    val cleanedContent = note.content
-        .replace("☐", "")
-        .replace("☑", "")
-        .trim()
+    val cleanedContent = extractPlainTextFromContent(note.content)
 
     val cardHeight = when {
         cleanedContent.length > 180 -> 230.dp
@@ -355,5 +368,28 @@ private fun FolderNoteCard(
                 )
             }
         }
+    }
+}
+
+private fun extractPlainTextFromContent(content: String): String {
+    if (content.isBlank()) return ""
+
+    return try {
+        val blocks = folderNotesJson.decodeFromString<List<FolderNoteBlockDto>>(content)
+        blocks.joinToString("\n") { block ->
+            when (block.type) {
+                "CHECKBOX" -> {
+                    val prefix = if (block.checked == true) "☑ " else "☐ "
+                    prefix + block.text
+                }
+                "BULLET" -> "• ${block.text}"
+                else -> block.text
+            }
+        }.trim()
+    } catch (_: Exception) {
+        content
+            .replace("☐", "")
+            .replace("☑", "")
+            .trim()
     }
 }

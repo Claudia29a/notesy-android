@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,9 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
@@ -30,7 +32,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -49,7 +50,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,18 +68,44 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.notesy.ui.viewmodel.NotesViewModel
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private val NotesyBg = Color(0xFFF6F3EC)
 private val NotesyNavy = Color(0xFF24345D)
 private val NotesyGold = Color(0xFFF3BC17)
 private val NotesyBlueSheet = Color(0xFFDCE6F4)
 
-private data class NoteLineUi(
-    val id: Long,
+private val notesJson = Json {
+    ignoreUnknownKeys = true
+    prettyPrint = false
+}
+
+private enum class BlockType {
+    PARAGRAPH,
+    BULLET,
+    CHECKBOX,
+    HEADING1,
+    HEADING2,
+    HEADING3
+}
+
+@Serializable
+private data class NoteBlockDto(
+    val type: String,
+    val text: String,
+    val checked: Boolean? = null
+)
+
+private data class NoteBlockUi(
+    val type: BlockType,
     val value: TextFieldValue,
     val checked: Boolean? = null
 )
@@ -107,20 +133,27 @@ fun AddNoteScreen(
         mutableStateOf(TextFieldValue(existingNote?.title ?: ""))
     }
 
-    val parsedLines = remember(existingNote) {
-        parseNoteLines(existingNote?.content ?: "")
+    val initialBlocks = remember(existingNote) {
+        parseBlocks(existingNote?.content.orEmpty())
     }
 
-    val noteLines = remember(existingNote) {
-        mutableStateListOf<NoteLineUi>().apply { addAll(parsedLines) }
+    val blocks = remember(existingNote) {
+        mutableStateListOf<NoteBlockUi>().apply {
+            if (initialBlocks.isEmpty()) {
+                add(
+                    NoteBlockUi(
+                        type = BlockType.PARAGRAPH,
+                        value = TextFieldValue("", TextRange(0))
+                    )
+                )
+            } else {
+                addAll(initialBlocks)
+            }
+        }
     }
 
-    var nextLineId by remember(existingNote) {
-        mutableLongStateOf((parsedLines.maxOfOrNull { it.id } ?: 0L) + 1L)
-    }
-
-    var activeLineId by remember { mutableStateOf<Long?>(null) }
-    var pendingFocusLineId by remember { mutableStateOf<Long?>(null) }
+    var activeBlockIndex by remember { mutableStateOf(0) }
+    var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(noteCreated) {
@@ -131,92 +164,56 @@ fun AddNoteScreen(
         }
     }
 
+    fun ensureAtLeastOneBlock() {
+        if (blocks.isEmpty()) {
+            blocks.add(
+                NoteBlockUi(
+                    type = BlockType.PARAGRAPH,
+                    value = TextFieldValue("", TextRange(0))
+                )
+            )
+            pendingFocusIndex = 0
+        }
+    }
+
+    fun insertBlockAfter(index: Int, type: BlockType, text: String = "", checked: Boolean? = null) {
+        val safeIndex = index.coerceIn(-1, blocks.lastIndex)
+        val insertIndex = (safeIndex + 1).coerceAtMost(blocks.size)
+        blocks.add(
+            insertIndex,
+            NoteBlockUi(
+                type = type,
+                value = TextFieldValue(text, TextRange(text.length)),
+                checked = checked
+            )
+        )
+        pendingFocusIndex = insertIndex
+    }
+
+    fun updateBlockType(type: BlockType) {
+        if (blocks.isEmpty()) return
+        val index = activeBlockIndex.coerceIn(0, blocks.lastIndex)
+        val current = blocks[index]
+        blocks[index] = current.copy(
+            type = type,
+            checked = if (type == BlockType.CHECKBOX) (current.checked ?: false) else null
+        )
+        pendingFocusIndex = index
+    }
+
     fun saveCurrentNote() {
-        val mergedContent = buildString {
-            noteLines.forEachIndexed { index, line ->
-                when (line.checked) {
-                    true -> append("☑ ${line.value.text}")
-                    false -> append("☐ ${line.value.text}")
-                    null -> append(line.value.text)
-                }
-                if (index != noteLines.lastIndex) append("\n")
-            }
-        }.trimEnd()
+        val content = serializeBlocks(blocks)
 
         if (title.text.isNotBlank()) {
             if (existingNote != null) {
                 viewModel.updateNote(
                     existingNote.id,
                     title.text,
-                    mergedContent,
+                    content,
                     existingNote.folderId
                 )
             } else {
-                viewModel.createNote(title.text, mergedContent, folderId)
-            }
-        }
-    }
-
-    fun insertLineAfterActive(checked: Boolean?, prefix: String = "") {
-        val newLine = NoteLineUi(
-            id = nextLineId,
-            value = TextFieldValue(prefix, TextRange(prefix.length)),
-            checked = checked
-        )
-        nextLineId += 1L
-
-        val activeIndex = noteLines.indexOfFirst { it.id == activeLineId }
-        if (activeIndex >= 0) {
-            noteLines.add(activeIndex + 1, newLine)
-        } else {
-            noteLines.add(newLine)
-        }
-
-        pendingFocusLineId = newLine.id
-    }
-
-    fun toggleBoldAtActiveLine() {
-        val activeIndex = noteLines.indexOfFirst { it.id == activeLineId }
-        if (activeIndex >= 0) {
-            val current = noteLines[activeIndex]
-            val text = current.value.text
-            val selection = current.value.selection
-            val start = selection.start.coerceAtLeast(0)
-            val end = selection.end.coerceAtLeast(start)
-
-            val updated = if (start != end) {
-                val newText =
-                    text.substring(0, start) +
-                            "**" +
-                            text.substring(start, end) +
-                            "**" +
-                            text.substring(end)
-                TextFieldValue(newText, TextRange(end + 4))
-            } else {
-                val newText =
-                    text.substring(0, start) + "****" + text.substring(end)
-                TextFieldValue(newText, TextRange(start + 2))
-            }
-
-            noteLines[activeIndex] = current.copy(value = updated)
-            pendingFocusLineId = current.id
-        } else {
-            val text = title.text
-            val selection = title.selection
-            val start = selection.start.coerceAtLeast(0)
-            val end = selection.end.coerceAtLeast(start)
-
-            title = if (start != end) {
-                val newText =
-                    text.substring(0, start) +
-                            "**" +
-                            text.substring(start, end) +
-                            "**" +
-                            text.substring(end)
-                TextFieldValue(newText, TextRange(end + 4))
-            } else {
-                val newText = text.substring(0, start) + "****" + text.substring(end)
-                TextFieldValue(newText, TextRange(start + 2))
+                viewModel.createNote(title.text, content, folderId)
             }
         }
     }
@@ -346,11 +343,14 @@ fun AddNoteScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            IconButton(onClick = { insertLineAfterActive(checked = null, prefix = "• ") }) {
+                            IconButton(onClick = {
+                                insertBlockAfter(activeBlockIndex, BlockType.BULLET)
+                            }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
                                     contentDescription = "Bullet point",
@@ -359,7 +359,9 @@ fun AddNoteScreen(
                                 )
                             }
 
-                            IconButton(onClick = { insertLineAfterActive(checked = false) }) {
+                            IconButton(onClick = {
+                                insertBlockAfter(activeBlockIndex, BlockType.CHECKBOX, checked = false)
+                            }) {
                                 Icon(
                                     imageVector = Icons.Default.CheckBox,
                                     contentDescription = "Checklist",
@@ -368,12 +370,46 @@ fun AddNoteScreen(
                                 )
                             }
 
-                            IconButton(onClick = { toggleBoldAtActiveLine() }) {
-                                Icon(
-                                    imageVector = Icons.Default.FormatBold,
-                                    contentDescription = "Bold",
-                                    tint = NotesyNavy,
-                                    modifier = Modifier.size(20.dp)
+                            TextButton(
+                                onClick = { updateBlockType(BlockType.PARAGRAPH) }
+                            ) {
+                                Text(
+                                    text = "Text",
+                                    color = NotesyNavy,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { updateBlockType(BlockType.HEADING1) }
+                            ) {
+                                Text(
+                                    text = "H1",
+                                    color = NotesyNavy,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { updateBlockType(BlockType.HEADING2) }
+                            ) {
+                                Text(
+                                    text = "H2",
+                                    color = NotesyNavy,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { updateBlockType(BlockType.HEADING3) }
+                            ) {
+                                Text(
+                                    text = "H3",
+                                    color = NotesyNavy,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
                         }
@@ -404,80 +440,78 @@ fun AddNoteScreen(
                 }
             }
 
-            items(noteLines, key = { it.id }) { line ->
-                val index = noteLines.indexOfFirst { it.id == line.id }
-                if (index == -1) return@items
-
-                when {
-                    line.checked != null -> {
-                        EditableChecklistRow(
-                            item = line,
-                            requestFocus = pendingFocusLineId == line.id,
+            itemsIndexed(blocks) { index, block ->
+                when (block.type) {
+                    BlockType.CHECKBOX -> {
+                        EditableCheckboxBlock(
+                            block = block,
+                            requestFocus = pendingFocusIndex == index,
                             onFocusHandled = {
-                                if (pendingFocusLineId == line.id) pendingFocusLineId = null
+                                if (pendingFocusIndex == index) pendingFocusIndex = null
                             },
-                            onFocused = { activeLineId = line.id },
+                            onFocused = { activeBlockIndex = index },
                             onToggle = {
-                                noteLines[index] = line.copy(checked = !(line.checked ?: false))
+                                blocks[index] = block.copy(checked = !(block.checked ?: false))
                             },
-                            onTextChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
-                            },
-                            onEnterPressed = {
-                                val newLine = NoteLineUi(
-                                    id = nextLineId,
-                                    value = TextFieldValue("", TextRange(0)),
-                                    checked = false
+                            onValueChange = { newValue ->
+                                handleCheckboxValueChange(
+                                    blocks = blocks,
+                                    index = index,
+                                    incoming = newValue,
+                                    onInsertNext = { insertIndex, type, text, checked ->
+                                        insertBlockAfter(insertIndex, type, text, checked)
+                                    }
                                 )
-                                nextLineId += 1L
-                                noteLines.add(index + 1, newLine)
-                                pendingFocusLineId = newLine.id
+                            },
+                            onHardwareEnterPressed = {
+                                insertBlockAfter(index, BlockType.CHECKBOX, checked = false)
                             },
                             onBackspaceAtEmpty = {
-                                if (noteLines.size > 1) {
-                                    val focusTarget = noteLines.getOrNull(index - 1)?.id
-                                        ?: noteLines.getOrNull(index + 1)?.id
-                                    noteLines.removeAt(index)
-                                    pendingFocusLineId = focusTarget
-                                } else {
-                                    noteLines[index] = line.copy(
-                                        checked = false,
-                                        value = TextFieldValue("", TextRange(0))
-                                    )
-                                    pendingFocusLineId = line.id
+                                if (blocks.size > 1) {
+                                    blocks.removeAt(index)
+                                    ensureAtLeastOneBlock()
+                                    pendingFocusIndex =
+                                        (index - 1).coerceAtLeast(0).coerceAtMost(blocks.lastIndex)
                                 }
                             }
                         )
                     }
 
-                    isSectionHeader(line.value.text) -> {
-                        EditablePlainLine(
-                            value = line.value,
-                            onValueChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
-                            },
-                            onFocused = { activeLineId = line.id },
-                            textStyle = TextStyle(
-                                color = NotesyNavy,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        )
-                    }
-
                     else -> {
-                        EditablePlainLine(
-                            value = line.value,
-                            onValueChange = { newValue ->
-                                noteLines[index] = line.copy(value = newValue)
+                        EditableTextBlock(
+                            block = block,
+                            requestFocus = pendingFocusIndex == index,
+                            onFocusHandled = {
+                                if (pendingFocusIndex == index) pendingFocusIndex = null
                             },
-                            onFocused = { activeLineId = line.id },
-                            textStyle = TextStyle(
-                                color = NotesyNavy,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Normal,
-                                lineHeight = 24.sp
-                            )
+                            onFocused = { activeBlockIndex = index },
+                            onValueChange = { newValue ->
+                                handleTextBlockValueChange(
+                                    blocks = blocks,
+                                    index = index,
+                                    incoming = newValue,
+                                    onInsertNext = { insertIndex, type, text, checked ->
+                                        insertBlockAfter(insertIndex, type, text, checked)
+                                    }
+                                )
+                            },
+                            onHardwareEnterPressed = {
+                                when (block.type) {
+                                    BlockType.BULLET -> insertBlockAfter(index, BlockType.BULLET)
+                                    BlockType.HEADING1,
+                                    BlockType.HEADING2,
+                                    BlockType.HEADING3 -> insertBlockAfter(index, BlockType.PARAGRAPH)
+                                    else -> insertBlockAfter(index, BlockType.PARAGRAPH)
+                                }
+                            },
+                            onBackspaceAtEmpty = {
+                                if (blocks.size > 1) {
+                                    blocks.removeAt(index)
+                                    ensureAtLeastOneBlock()
+                                    pendingFocusIndex =
+                                        (index - 1).coerceAtLeast(0).coerceAtMost(blocks.lastIndex)
+                                }
+                            }
                         )
                     }
                 }
@@ -561,7 +595,7 @@ fun AddNoteScreen(
                             LazyColumn(
                                 modifier = Modifier.heightIn(max = 320.dp)
                             ) {
-                                items(groceryDialogState.suggestions) { suggestion ->
+                                itemsIndexed(groceryDialogState.suggestions) { _, suggestion ->
                                     ListItem(
                                         headlineContent = {
                                             Text(
@@ -613,34 +647,89 @@ fun AddNoteScreen(
 }
 
 @Composable
-private fun EditablePlainLine(
-    value: TextFieldValue,
-    onValueChange: (TextFieldValue) -> Unit,
+private fun EditableTextBlock(
+    block: NoteBlockUi,
+    requestFocus: Boolean,
+    onFocusHandled: () -> Unit,
     onFocused: () -> Unit,
-    textStyle: TextStyle
+    onValueChange: (TextFieldValue) -> Unit,
+    onHardwareEnterPressed: () -> Unit,
+    onBackspaceAtEmpty: () -> Unit
 ) {
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        textStyle = textStyle,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged {
-                if (it.isFocused) onFocused()
-            },
-        decorationBox = { innerTextField -> innerTextField() }
-    )
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(requestFocus) {
+        if (requestFocus) {
+            focusRequester.requestFocus()
+            onFocusHandled()
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        if (block.type == BlockType.BULLET) {
+            Text(
+                text = "•",
+                color = NotesyNavy,
+                fontSize = 24.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+
+        BasicTextField(
+            value = block.value,
+            onValueChange = onValueChange,
+            textStyle = blockTextStyle(block.type),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Default
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester)
+                .onFocusChanged {
+                    if (it.isFocused) onFocused()
+                }
+                .onPreviewKeyEvent { event ->
+                    when {
+                        event.type == KeyEventType.KeyDown && event.key == Key.Enter -> {
+                            onHardwareEnterPressed()
+                            true
+                        }
+                        event.type == KeyEventType.KeyDown &&
+                                event.key == Key.Backspace &&
+                                block.value.text.isEmpty() -> {
+                            onBackspaceAtEmpty()
+                            true
+                        }
+                        else -> false
+                    }
+                },
+            decorationBox = { innerTextField ->
+                if (block.value.text.isBlank()) {
+                    Text(
+                        text = blockPlaceholder(block.type),
+                        color = NotesyNavy.copy(alpha = 0.35f),
+                        fontSize = blockTextStyle(block.type).fontSize
+                    )
+                }
+                innerTextField()
+            }
+        )
+    }
 }
 
 @Composable
-private fun EditableChecklistRow(
-    item: NoteLineUi,
+private fun EditableCheckboxBlock(
+    block: NoteBlockUi,
     requestFocus: Boolean,
     onFocusHandled: () -> Unit,
     onFocused: () -> Unit,
     onToggle: () -> Unit,
-    onTextChange: (TextFieldValue) -> Unit,
-    onEnterPressed: () -> Unit,
+    onValueChange: (TextFieldValue) -> Unit,
+    onHardwareEnterPressed: () -> Unit,
     onBackspaceAtEmpty: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -656,88 +745,233 @@ private fun EditableChecklistRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = if (item.checked == true) "☑" else "☐",
-            color = NotesyNavy,
-            fontSize = 30.sp,
-            modifier = Modifier.clickable { onToggle() }
+        Checkbox(
+            checked = block.checked ?: false,
+            onCheckedChange = { onToggle() }
         )
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(6.dp))
 
         BasicTextField(
-            value = item.value,
-            onValueChange = onTextChange,
+            value = block.value,
+            onValueChange = onValueChange,
             textStyle = TextStyle(
                 color = NotesyNavy,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Normal
             ),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Default
+            ),
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .focusRequester(focusRequester)
                 .onFocusChanged {
                     if (it.isFocused) onFocused()
                 }
                 .onPreviewKeyEvent { event ->
                     when {
-                        event.type == KeyEventType.KeyDown &&
-                                event.key == Key.Enter -> {
-                            onEnterPressed()
+                        event.type == KeyEventType.KeyDown && event.key == Key.Enter -> {
+                            onHardwareEnterPressed()
                             true
                         }
-
                         event.type == KeyEventType.KeyDown &&
                                 event.key == Key.Backspace &&
-                                item.value.text.isEmpty() -> {
+                                block.value.text.isEmpty() -> {
                             onBackspaceAtEmpty()
                             true
                         }
-
                         else -> false
                     }
                 },
-            decorationBox = { innerTextField -> innerTextField() }
+            decorationBox = { innerTextField ->
+                if (block.value.text.isBlank()) {
+                    Text(
+                        text = "List item",
+                        color = NotesyNavy.copy(alpha = 0.35f),
+                        fontSize = 20.sp
+                    )
+                }
+                innerTextField()
+            }
         )
     }
 }
 
-private fun parseNoteLines(content: String): List<NoteLineUi> {
+private fun handleTextBlockValueChange(
+    blocks: MutableList<NoteBlockUi>,
+    index: Int,
+    incoming: TextFieldValue,
+    onInsertNext: (Int, BlockType, String, Boolean?) -> Unit
+) {
+    val newlineIndex = incoming.text.indexOf('\n')
+    if (newlineIndex == -1) {
+        blocks[index] = blocks[index].copy(value = incoming)
+        return
+    }
+
+    val before = incoming.text.substring(0, newlineIndex)
+    val after = incoming.text.substring(newlineIndex + 1)
+    val current = blocks[index]
+
+    blocks[index] = current.copy(
+        value = TextFieldValue(before, TextRange(before.length))
+    )
+
+    val nextType = when (current.type) {
+        BlockType.BULLET -> BlockType.BULLET
+        BlockType.HEADING1,
+        BlockType.HEADING2,
+        BlockType.HEADING3 -> BlockType.PARAGRAPH
+        else -> BlockType.PARAGRAPH
+    }
+
+    onInsertNext(index, nextType, after, null)
+}
+
+private fun handleCheckboxValueChange(
+    blocks: MutableList<NoteBlockUi>,
+    index: Int,
+    incoming: TextFieldValue,
+    onInsertNext: (Int, BlockType, String, Boolean?) -> Unit
+) {
+    val newlineIndex = incoming.text.indexOf('\n')
+    if (newlineIndex == -1) {
+        blocks[index] = blocks[index].copy(value = incoming)
+        return
+    }
+
+    val before = incoming.text.substring(0, newlineIndex)
+    val after = incoming.text.substring(newlineIndex + 1)
+    val current = blocks[index]
+
+    blocks[index] = current.copy(
+        value = TextFieldValue(before, TextRange(before.length))
+    )
+
+    onInsertNext(index, BlockType.CHECKBOX, after, false)
+}
+
+private fun blockTextStyle(type: BlockType): TextStyle {
+    return when (type) {
+        BlockType.HEADING1 -> TextStyle(
+            color = NotesyNavy,
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 40.sp
+        )
+        BlockType.HEADING2 -> TextStyle(
+            color = NotesyNavy,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 32.sp
+        )
+        BlockType.HEADING3 -> TextStyle(
+            color = NotesyNavy,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 26.sp
+        )
+        BlockType.BULLET -> TextStyle(
+            color = NotesyNavy,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 24.sp
+        )
+        else -> TextStyle(
+            color = NotesyNavy,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 24.sp
+        )
+    }
+}
+
+private fun blockPlaceholder(type: BlockType): String {
+    return when (type) {
+        BlockType.HEADING1 -> "Heading 1"
+        BlockType.HEADING2 -> "Heading 2"
+        BlockType.HEADING3 -> "Heading 3"
+        BlockType.BULLET -> "Bullet item"
+        BlockType.PARAGRAPH -> "Start typing"
+        BlockType.CHECKBOX -> "List item"
+    }
+}
+
+private fun serializeBlocks(blocks: List<NoteBlockUi>): String {
+    val dto = blocks.map {
+        NoteBlockDto(
+            type = it.type.name,
+            text = it.value.text,
+            checked = it.checked
+        )
+    }
+    return notesJson.encodeToString(dto)
+}
+
+private fun parseBlocks(content: String): List<NoteBlockUi> {
     if (content.isBlank()) return emptyList()
 
-    var nextId = 1L
+    return try {
+        val dto = notesJson.decodeFromString<List<NoteBlockDto>>(content)
+        dto.map {
+            NoteBlockUi(
+                type = it.type.toBlockType(),
+                value = TextFieldValue(it.text, TextRange(it.text.length)),
+                checked = it.checked
+            )
+        }
+    } catch (_: Exception) {
+        parseLegacyPlainText(content)
+    }
+}
+
+private fun parseLegacyPlainText(content: String): List<NoteBlockUi> {
+    if (content.isBlank()) return emptyList()
+
     return content.lines().map { line ->
         when {
-            line.startsWith("☑ ") -> NoteLineUi(
-                id = nextId++,
-                value = TextFieldValue(
-                    text = line.removePrefix("☑ "),
-                    selection = TextRange(line.removePrefix("☑ ").length)
-                ),
+            line.startsWith("☑ ") -> NoteBlockUi(
+                type = BlockType.CHECKBOX,
+                value = TextFieldValue(line.removePrefix("☑ "), TextRange(line.removePrefix("☑ ").length)),
                 checked = true
             )
-
-            line.startsWith("☐ ") -> NoteLineUi(
-                id = nextId++,
-                value = TextFieldValue(
-                    text = line.removePrefix("☐ "),
-                    selection = TextRange(line.removePrefix("☐ ").length)
-                ),
+            line.startsWith("☐ ") -> NoteBlockUi(
+                type = BlockType.CHECKBOX,
+                value = TextFieldValue(line.removePrefix("☐ "), TextRange(line.removePrefix("☐ ").length)),
                 checked = false
             )
-
-            else -> NoteLineUi(
-                id = nextId++,
-                value = TextFieldValue(
-                    text = line,
-                    selection = TextRange(line.length)
-                ),
-                checked = null
+            line.startsWith("• ") -> NoteBlockUi(
+                type = BlockType.BULLET,
+                value = TextFieldValue(line.removePrefix("• "), TextRange(line.removePrefix("• ").length))
+            )
+            line.startsWith("### ") -> NoteBlockUi(
+                type = BlockType.HEADING3,
+                value = TextFieldValue(line.removePrefix("### "), TextRange(line.removePrefix("### ").length))
+            )
+            line.startsWith("## ") -> NoteBlockUi(
+                type = BlockType.HEADING2,
+                value = TextFieldValue(line.removePrefix("## "), TextRange(line.removePrefix("## ").length))
+            )
+            line.startsWith("# ") -> NoteBlockUi(
+                type = BlockType.HEADING1,
+                value = TextFieldValue(line.removePrefix("# "), TextRange(line.removePrefix("# ").length))
+            )
+            else -> NoteBlockUi(
+                type = BlockType.PARAGRAPH,
+                value = TextFieldValue(line, TextRange(line.length))
             )
         }
     }
 }
 
-private fun isSectionHeader(text: String): Boolean {
-    return text.trim().matches(Regex("^Week\\s+\\d+$", RegexOption.IGNORE_CASE))
+private fun String.toBlockType(): BlockType {
+    return when (this) {
+        "HEADING1" -> BlockType.HEADING1
+        "HEADING2" -> BlockType.HEADING2
+        "HEADING3" -> BlockType.HEADING3
+        "BULLET" -> BlockType.BULLET
+        "CHECKBOX" -> BlockType.CHECKBOX
+        else -> BlockType.PARAGRAPH
+    }
 }

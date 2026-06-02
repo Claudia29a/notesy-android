@@ -4,6 +4,8 @@ import android.app.Application
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
@@ -23,6 +25,10 @@ import com.example.notesy.utils.grocery.SuggestedItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,6 +54,33 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _groceryDialogState = MutableStateFlow(GrocerySuggestionDialogState())
     val groceryDialogState: StateFlow<GrocerySuggestionDialogState> = _groceryDialogState
+
+    private val notesJson = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = false
+    }
+
+    private enum class BlockType {
+        PARAGRAPH,
+        BULLET,
+        CHECKBOX,
+        HEADING1,
+        HEADING2,
+        HEADING3
+    }
+
+    @Serializable
+    private data class NoteBlockDto(
+        val type: String,
+        val text: String,
+        val checked: Boolean? = null
+    )
+
+    private data class NoteBlockUi(
+        val type: BlockType,
+        val value: TextFieldValue,
+        val checked: Boolean? = null
+    )
 
     init {
         viewModelScope.launch {
@@ -255,17 +288,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                     .filter { it.isNotBlank() }
                     .distinct()
 
-                val appendBlock = buildString {
-                    append("\n\nSuggested items:\n")
-                    newItems.forEach { item ->
-                        append("☐ ")
-                        append(item)
-                        append("\n")
-                    }
-                }.trimEnd()
-
-                val baseContent = currentNoteEntity.content.trimEnd()
-                val updatedContent = if (baseContent.isBlank()) appendBlock.trimStart() else baseContent + appendBlock
+                val updatedContent = appendSuggestedItemsAsBlocks(
+                    existingContent = currentNoteEntity.content,
+                    newItems = newItems
+                )
 
                 noteRepository.updateNote(
                     id = currentNoteEntity.id,
@@ -279,6 +305,137 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.e("AI_SUGGESTIONS", "Failed to add selected suggested items", e)
             }
+        }
+    }
+
+    private fun appendSuggestedItemsAsBlocks(
+        existingContent: String,
+        newItems: List<String>
+    ): String {
+        val blocks = parseBlocks(existingContent).toMutableList()
+
+        if (blocks.isNotEmpty() && blocks.last().value.text.isNotBlank()) {
+            blocks.add(
+                NoteBlockUi(
+                    type = BlockType.PARAGRAPH,
+                    value = TextFieldValue("", TextRange(0))
+                )
+            )
+        }
+
+        blocks.add(
+            NoteBlockUi(
+                type = BlockType.HEADING3,
+                value = TextFieldValue("Suggested items", TextRange("Suggested items".length))
+            )
+        )
+
+        newItems.forEach { item ->
+            blocks.add(
+                NoteBlockUi(
+                    type = BlockType.CHECKBOX,
+                    value = TextFieldValue(item, TextRange(item.length)),
+                    checked = false
+                )
+            )
+        }
+
+        return serializeBlocks(blocks)
+    }
+
+    private fun serializeBlocks(blocks: List<NoteBlockUi>): String {
+        val dto = blocks.map {
+            NoteBlockDto(
+                type = it.type.name,
+                text = it.value.text,
+                checked = it.checked
+            )
+        }
+        return notesJson.encodeToString(dto)
+    }
+
+    private fun parseBlocks(content: String): List<NoteBlockUi> {
+        if (content.isBlank()) return emptyList()
+
+        return try {
+            val dto = notesJson.decodeFromString<List<NoteBlockDto>>(content)
+            dto.map {
+                NoteBlockUi(
+                    type = it.type.toBlockType(),
+                    value = TextFieldValue(it.text, TextRange(it.text.length)),
+                    checked = it.checked
+                )
+            }
+        } catch (_: Exception) {
+            parseLegacyPlainText(content)
+        }
+    }
+
+    private fun parseLegacyPlainText(content: String): List<NoteBlockUi> {
+        if (content.isBlank()) return emptyList()
+
+        return content.lines().map { line ->
+            when {
+                line.startsWith("☑ ") -> {
+                    val text = line.removePrefix("☑ ")
+                    NoteBlockUi(
+                        type = BlockType.CHECKBOX,
+                        value = TextFieldValue(text, TextRange(text.length)),
+                        checked = true
+                    )
+                }
+                line.startsWith("☐ ") -> {
+                    val text = line.removePrefix("☐ ")
+                    NoteBlockUi(
+                        type = BlockType.CHECKBOX,
+                        value = TextFieldValue(text, TextRange(text.length)),
+                        checked = false
+                    )
+                }
+                line.startsWith("• ") -> {
+                    val text = line.removePrefix("• ")
+                    NoteBlockUi(
+                        type = BlockType.BULLET,
+                        value = TextFieldValue(text, TextRange(text.length))
+                    )
+                }
+                line.startsWith("### ") -> {
+                    val text = line.removePrefix("### ")
+                    NoteBlockUi(
+                        type = BlockType.HEADING3,
+                        value = TextFieldValue(text, TextRange(text.length))
+                    )
+                }
+                line.startsWith("## ") -> {
+                    val text = line.removePrefix("## ")
+                    NoteBlockUi(
+                        type = BlockType.HEADING2,
+                        value = TextFieldValue(text, TextRange(text.length))
+                    )
+                }
+                line.startsWith("# ") -> {
+                    val text = line.removePrefix("# ")
+                    NoteBlockUi(
+                        type = BlockType.HEADING1,
+                        value = TextFieldValue(text, TextRange(text.length))
+                    )
+                }
+                else -> NoteBlockUi(
+                    type = BlockType.PARAGRAPH,
+                    value = TextFieldValue(line, TextRange(line.length))
+                )
+            }
+        }
+    }
+
+    private fun String.toBlockType(): BlockType {
+        return when (this) {
+            "HEADING1" -> BlockType.HEADING1
+            "HEADING2" -> BlockType.HEADING2
+            "HEADING3" -> BlockType.HEADING3
+            "BULLET" -> BlockType.BULLET
+            "CHECKBOX" -> BlockType.CHECKBOX
+            else -> BlockType.PARAGRAPH
         }
     }
 
