@@ -57,7 +57,6 @@ import androidx.compose.ui.unit.sp
 import com.example.notesy.data.model.Note
 import com.example.notesy.ui.viewmodel.NotesViewModel
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 private val NotesyBg = Color(0xFFF6F3EC)
@@ -202,7 +201,7 @@ fun FolderNotesScreen(
                 Text(
                     text = folder?.name ?: "Notes",
                     color = Color.Black,
-                    fontSize = 26.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Normal
                 )
 
@@ -320,17 +319,10 @@ private fun FolderNoteCard(
 ) {
     val cleanedContent = extractPlainTextFromContent(note.content)
 
-    val cardHeight = when {
-        cleanedContent.length > 180 -> 230.dp
-        cleanedContent.length > 90 -> 180.dp
-        cleanedContent.isNotBlank() -> 140.dp
-        else -> 120.dp
-    }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(cardHeight)
+            .height(150.dp)
             .shadow(
                 elevation = 4.dp,
                 shape = RoundedCornerShape(22.dp),
@@ -350,20 +342,20 @@ private fun FolderNoteCard(
             Text(
                 text = note.title,
                 color = Color.Black,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
             if (cleanedContent.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = cleanedContent,
                     color = NotesyNavy.copy(alpha = 0.72f),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    maxLines = 8,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }

@@ -56,6 +56,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.notesy.data.model.Note
 import com.example.notesy.ui.viewmodel.NotesViewModel
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+
+private val notePreviewJson = Json {
+    ignoreUnknownKeys = true
+    prettyPrint = false
+}
+
+@Serializable
+private data class NotePreviewBlockDto(
+    val type: String,
+    val text: String,
+    val checked: Boolean? = null
+)
 
 private val NotesyBg = Color(0xFFF6F3EC)
 private val NotesyNavy = Color(0xFF24345D)
@@ -241,7 +256,7 @@ fun NotesListScreen(
                                 NoteStickyCard(
                                     note = note,
                                     modifier = Modifier.fillMaxWidth(),
-                                    height = if (note.content.length > 80) 210.dp else 160.dp,
+                                    height = 150.dp,
                                     onClick = { onEditNoteClick(note.id) }
                                 )
                             }
@@ -256,7 +271,7 @@ fun NotesListScreen(
                                 NoteStickyCard(
                                     note = note,
                                     modifier = Modifier.fillMaxWidth(),
-                                    height = if (note.content.length > 40) 170.dp else 120.dp,
+                                    height = 150.dp,
                                     onClick = { onEditNoteClick(note.id) }
                                 )
                             }
@@ -310,6 +325,8 @@ private fun NoteStickyCard(
     height: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit
 ) {
+    val previewText = extractPlainTextFromContent(note.content)
+
     Card(
         modifier = modifier
             .height(height)
@@ -332,26 +349,46 @@ private fun NoteStickyCard(
             Text(
                 text = note.title,
                 color = Color.Black,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Normal,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (note.content.isNotBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
+            if (previewText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = note.content
-                        .replace("☐", "")
-                        .replace("☑", "")
-                        .trim(),
+                    text = previewText,
                     color = NotesyNavy.copy(alpha = 0.75f),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    maxLines = 8,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
+    }
+}
+
+private fun extractPlainTextFromContent(content: String): String {
+    if (content.isBlank()) return ""
+
+    return try {
+        val blocks = notePreviewJson.decodeFromString<List<NotePreviewBlockDto>>(content)
+        blocks.joinToString("\n") { block ->
+            when (block.type) {
+                "CHECKBOX" -> {
+                    val prefix = if (block.checked == true) "☑ " else "☐ "
+                    prefix + block.text
+                }
+                "BULLET" -> "• ${block.text}"
+                else -> block.text
+            }
+        }.trim()
+    } catch (_: Exception) {
+        content
+            .replace("☐", "")
+            .replace("☑", "")
+            .trim()
     }
 }
